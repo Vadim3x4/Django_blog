@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+{% load user_filters %}
+
+<main role="main" class="container">
+    <div class="row">
+        <div class="col-md-3 mb-3 mt-1">
+            <div class="card">
+                <div class="card-body">
+                    <div class="h2">
+                        <h6> Имя автора: {{author.get_full_name}} </h6>
+                    </div>
+                    <div class="h3 text-muted">
+                       <h6>username автора: {{ username }} </h6>
+                   </div>
+               </div>
+               <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <div class="h6 text-muted">
+                        Подписчиков: {{ following_count }} <br />
+                        Подписан: {{ follower_count }}
+                    </div>
+                </li>
+                <li class="list-group-item">
+                    <div class="h6 text-muted">
+                        <h6>Количество записей: {{ paginator.count }} </h6>
+                    </div>
+                    {% if request.user.is_authenticated %}
+                            {% if user != author %}
+                                <li class="list-group-item">
+                                    {% if status_following %}
+                                        <a class="btn btn-lg btn-light" href="{% url 'profile_unfollow' author.username %}" role="button"> 
+                                            Отписаться 
+                                        </a> 
+                                    {% else %}
+                                        <a class="btn btn-lg btn-primary" href="{% url 'profile_follow' author.username %}" role="button">
+                                            Подписаться 
+                                        </a>
+                                    {% endif %}
+                                </li>
+                            {% endif %}
+                        {% endif %}                        
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-9">                
+                <div class="card mb-3 mt-1 shadow-sm">
+                        <div class="card-body">
+                            <p class="card-text">
+                                {% for post in page %}
+                                    {% include "post_item.html" with post=post %}   
+                                {% endfor %}
+                            </p>
+                        </div>
+                    </div>
+                {% if page.has_other_pages %}
+                    {% include "paginator.html" with items=page paginator=paginator%}
+                {% endif %}
+                </li>
+            </ul>
+        </li>
+    </div>
+</div>
+
+<div class="col-md-9">                
+    {% endblock %}
+</div>
+</div>
+</main>
