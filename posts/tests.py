@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from PIL import Image
-from posts.models import Post, Group, User, Comment
+from posts.models import Post, Group, User, Comment, Follow
 import tempfile
 import time
 
@@ -35,6 +35,10 @@ class PostsTest(TestCase):
         self.edit_text = 'EditTestEdit'
         self.image = self._create_img()
         self.notImg = self._create_file()
+        self.error_message = (
+            "Загрузите правильное изображение. Файл, "
+            "который вы загрузили, поврежден или не "
+            "является изображением.")
 
     def _create_img(self):
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
@@ -132,6 +136,7 @@ class PostsTest(TestCase):
                                                {'text': {self.edit_text},
                                                 'image': self.notImg})
         self.assertTrue(response.context['form'].has_error('image'))
+        self.assertFormError(response, "form", "image", self.error_message)
 
 
 class TestCache(TestCase):
@@ -149,89 +154,85 @@ class TestFollowing(TestCase):
     def setUp(self):
         self.authorized_client = Client()
         self.unauthorized_client = Client()
-        self.user_1 = User.objects.create_user(
+        self.first_user = User.objects.create_user(
             username='ivan1337',
             email='ivan1337@ya.ru',
             password='13371337')
-        self.user_2 = User.objects.create_user(
+        self.second_user = User.objects.create_user(
             username='oleg1337',
             email='oleg1337@ya.ru',
             password='13371337')
 
     def test_follow(self):
-        self.authorized_client.force_login(self.user_1)
-        response = self.authorized_client.get(
-            reverse('profile', kwargs={'username': self.user_2.username}))
-        button_subscribe = 'Подписаться'
-        self.assertContains(response, button_subscribe)
-        response = self.authorized_client.get(
-            reverse('profile_follow', kwargs={'username': self.user_2.username}))
-        author_profile = reverse(
-            'profile', kwargs={'username': self.user_2.username})
-        self.assertRedirects(response, author_profile)
-        response = self.authorized_client.get(
-            reverse('profile', kwargs={'username': self.user_2.username}))
-        button_unsubscribe = 'Отписаться'
-        self.assertContains(response, button_unsubscribe)
-        response = self.authorized_client.get(
-            reverse('profile_unfollow', kwargs={'username': self.user_2.username}))
-        author_profile = reverse(
-            'profile', kwargs={'username': self.user_2.username})
-        self.assertRedirects(response, author_profile)
+        self.authorized_client.force_login(self.first_user)
+        self.assertEqual(Follow.objects.count(), 0)
+        self.authorized_client.post(reverse("profile_follow", kwargs={
+            'username': self.second_user.username}))
+        self.assertEqual(Follow.objects.count(), 1)
+
+    def test_unfollow(self):
+        self.assertEqual(Follow.objects.count(), 0)
+        self.client.post(reverse("profile_follow", kwargs={
+            'username': self.second_user.username}))
+        self.assertEqual(Follow.objects.count(), 0)
 
     def test_follow_lent(self):
         self.post = Post.objects.create(
-            text='Test_text', author=self.user_2)
-        self.authorized_client.force_login(self.user_1)
+            text='Test_text', author=self.second_user)
+        self.authorized_client.force_login(self.first_user)
         self.authorized_client.get(
-            reverse('profile_follow', kwargs={'username': self.user_2.username}))
-        response = self.authorized_client.get(reverse('user_following'))
+            reverse('profile_follow', kwargs={'username': self.second_user.username}))
+        response = self.authorized_client.get(reverse('follow_index'))
         self.assertContains(response, self.post.text)
-        self.authorized_client.get(
-            reverse('profile_unfollow', kwargs={'username': self.user_2.username}))
-        response = self.authorized_client.get(reverse('user_following'))
-        self.assertNotContains(response, self.post.text)
+        self.assertEqual(response.status_code, 200)
+        follow_post = Post.objects.all().first()
+        self.assertEqual(follow_post.author, self.post.author)
+
+    def test_unfollow_lent(self):
+        self.post = Post.objects.create(
+            text='Test_text', author=self.second_user)
+        response = self.unauthorized_client.get(reverse('follow_index'))
+        self.login_target = reverse(
+            'login') + '?next=' + reverse('follow_index')
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, self.login_target)
 
 
 class TestComment(TestCase):
     def setUp(self):
         self.authorized_client = Client()
         self.unauthorized_client = Client()
-        self.user_1 = User.objects.create_user(
+        self.first_user = User.objects.create_user(
             username='ivan1337',
             email='ivan1337@ya.ru',
             password='13371337')
-        self.user_2 = User.objects.create_user(
+        self.second_user = User.objects.create_user(
             username='oleg1337',
             email='oleg1337@ya.ru',
             password='13371337')
         self.post_user2 = Post.objects.create(
-            text='test_text', author=self.user_2)
+            text='test_text', author=self.second_user)
         self.post_id = self.post_user2.id
         self.test_text = 'text_comment'
 
     def test_comment_auth(self):
-        comment_url = reverse('add_comment', kwargs={'username': self.user_2,
+        comment_url = reverse('add_comment', kwargs={'username': self.second_user,
                                                      'post_id': self.post_id})
-        self.authorized_client.force_login(self.user_1)
+        self.authorized_client.force_login(self.first_user)
         self.authorized_client.post(comment_url, {'text': self.test_text})
         response = self.authorized_client.get(reverse('post', kwargs={
-            'username': self.user_2.username,
+            'username': self.second_user.username,
             'post_id': self.post_id}))
         self.assertEqual(1, Comment.objects.filter(
             text=self.test_text).count())
         self.assertContains(response, self.test_text)
 
-
-
-
-
     def test_comment_deauth(self):
-        comment_url = reverse('add_comment', kwargs={'username': self.user_2,
+        comment_url = reverse('add_comment', kwargs={'username': self.second_user,
                                                      'post_id': self.post_id})
         self.authorized_client.post(comment_url, {'text': self.test_text})
         response = self.authorized_client.get(reverse('post', kwargs={
-            'username': self.user_2.username,
+            'username': self.second_user.username,
             'post_id': self.post_id}))
         self.assertEqual(0, Comment.objects.filter(
             text=self.test_text).count())

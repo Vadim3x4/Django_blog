@@ -17,8 +17,8 @@
                <ul class="list-group list-group-flush">
                 <li class="list-group-item">
                     <div class="h6 text-muted">
-                        Подписчиков: XXX <br />
-                        Подписан: XXX
+                        Подписчиков: {{ following_count }} <br />
+                        Подписан: {{ follower_count }}
                     </div>
                 </li>
                 <li class="list-group-item">
@@ -34,8 +34,8 @@
     <div class="col-md-9">
 
         <!-- Пост -->  
-        {% include "post_item.html" with post=post %}
-        {% include "comments.html"  %}
+        {% include "includes/post_item.html" with post=post %}
+        {% include "includes/comments.html"  %}
     </div>
 </div>
 </div>
